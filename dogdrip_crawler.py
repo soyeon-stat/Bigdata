@@ -205,10 +205,12 @@ def fetch_post_content(post_no):
     last_c_page = find_last_comment_page(soup)
     comments = fetch_comment_contents(post_no, last_c_page)
 
-    return {'post_no': post_no,
-            'comment': n_comments,
-            'content': body,
-            'comments': comments}
+    return {'post_no':  post_no,
+            'comment':  n_comments,
+            'content':  body,
+            'comments': comments,
+            'updated' : datetime.now().strftime('%Y-%m-%d %H:%M'),
+            }
 
 if __name__ == "__main__" :
 
@@ -240,6 +242,7 @@ if __name__ == "__main__" :
                     'date': dates.strftime('%Y-%m-%d %H:%M'),
                     'content': article_comments['content'],
                     'comments': article_comments['comments'],
+                    'updated' : article_comments['updated']
                 }
                 contents.append(result)
                 time.sleep(0.5)
