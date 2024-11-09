@@ -31,15 +31,3 @@ jobs:
     - name: Run crawling
       run: |
         python "dogdrip_crawler.py"
-    - name: commit
-      run: |
-        git config --local user.email "tmdduq9008@gmail.com"
-        git config --local user.name "SEUNGTO"
-        git add dogdrip_data.json
-        git commit -m "update dogdrip data"
-
-    - name: push
-      uses : ad-m/github-push-action@master
-      with :
-         branch : ${{ github.ref }}
-         github_token : ${{ secrets.TOKEN }}
