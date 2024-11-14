@@ -216,7 +216,7 @@ if __name__ == "__main__" :
 
     # 게시글 목록 리스팅
     page = 1
-    days = 7        # 크롤링할 기간(N일 전부터 오늘까지)
+    days = 14        # 크롤링할 기간(N일 전부터 오늘까지)
     contents = []
 
     while True :
