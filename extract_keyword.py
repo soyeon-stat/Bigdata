@@ -68,3 +68,16 @@ if __name__ == '__main__' :
 
     doc_tfidf = doc_tfidf.groupby('label')[['score']].mean().sort_values('score', ascending=False)
     print(doc_tfidf.join(lexicon_dict))
+
+
+    # 4) Key-BERT
+    
+    print("====== Key BERT ======")
+    from keybert import KeyBERT
+    model = KeyBERT()
+    # 전체 문서를 기준으로
+    nouns = [",".join(x) for x in tokenized_corpus]
+    nouns = ",".join(nouns)
+    for x in corpus :
+        print(x)
+    print(model.extract_keywords(nouns))
