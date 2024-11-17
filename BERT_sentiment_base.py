@@ -67,3 +67,5 @@ if __name__ == '__main__' :
         print(f"----- {m} 감성분석 결과 -----")
         for keyword, analysis in results.items():
             print(f"키워드: {keyword}, 감성: {analysis['label']}, 확신도: {analysis['score']:.2f}")
+
+
