@@ -1,4 +1,4 @@
-from transformers import T5Tokenizer, AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, Seq2SeqTrainer, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, Seq2SeqTrainer, AutoTokenizer
 from datasets import load_dataset
 
 def preprocess_function(batch):
