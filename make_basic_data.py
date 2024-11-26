@@ -50,7 +50,7 @@ def get_sentiment_result(keyword, text) :
 
     prompt = f"""
     {keyword}에 대해선 "{text}"를 감성분석해줘.
-    분석한 결과는 (키워드, label, score)의 형태로만 반환해줘
+    분석한 결과는 (label, score)의 형태로만 반환해줘
     """
 
     response = openai.Completion.create(
