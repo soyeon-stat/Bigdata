@@ -1,7 +1,7 @@
 import pdb
 import requests
 import pandas as pd
-from config import *
+from config.config import *
 
 
 def fetch_basic_data() :
@@ -9,7 +9,7 @@ def fetch_basic_data() :
     response = requests.get(
         url = url,
         headers = OPENSEARCH_HEADERS,
-        auth = OEPNSEARCH_AUTH,
+        auth = OPENSEARCH_AUTH,
     )
 
     return response.json()
