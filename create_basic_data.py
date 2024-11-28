@@ -101,7 +101,7 @@ if __name__ == '__main__' :
 
         # 3. 인기정도 구하기
         time_diff = pd.to_datetime(item['timestp']) - pd.to_datetime(item['post_date'])
-        unit_time = time_diff.total_seconds() / (3600 * 24)
+        unit_time = max(time_diff.total_seconds() / (3600 * 24), 0.5)   # 최소값 부여
         item['vote_level'] = calculate_popular(item['vote_up'], unit_time)
         item['view_level'] = calculate_popular(item['view'], unit_time)
         item['comment_level'] = calculate_popular(item['n_comment'], unit_time)

@@ -2,6 +2,7 @@ import pdb
 import json
 import requests
 import pandas as pd
+import numpy as np
 from config.config import *
 from sqlalchemy import create_engine
 
@@ -30,16 +31,6 @@ def calcurate_period_popular(group, col, agg, window_size) :
     elif agg == 'sum' : 
         return group[col].rolling(window = window_size, min_periods=1).sum()
 
-
-# def create_engine() :
-#     conn=pg2.connect(database=DB_NAME,
-#                 host=DB_URL,
-#                 port=DB_PORT,
-#                 user=DB_ID,
-#                 password=DB_PW)
-
-#     yield conn
-
 if __name__ == '__main__' :
 
     # 1. 데이터 불러오기
@@ -67,10 +58,15 @@ if __name__ == '__main__' :
     # 3. 주요 지표 계산
     pivoting = basic_data.groupby(['community', 'keyword', 'post_date'])
 
-    window_size = 2  # 주요 지표를 계산할 기간. 본 데이터에서는 7일로 설정할 예정
+    # 주요 지표를 계산할 기간. 최근 window_size일의 지표를 계산함. 본 데이터에서는 7일로 설정할 예정
+    window_size = 2
 
-    # 키워드의 감성레이블/점수
+    # 키워드의 감성 label
+    # 감성이 여러개인 경우 중립을 선택. 시간 여유가 된다면 점수가 높은 경우를 택하는 로직으로 변경할 예정
     label = pivoting[['label']].agg(pd.Series.mode)
+    label['label'] = [l if type(l) == str else '중립' for l in label['label']] 
+    
+    # 키워드의 감성 score
     label_score = pivoting[['label_score']].mean()
 
     # 게시글수/누적게시글수
@@ -99,12 +95,15 @@ if __name__ == '__main__' :
     dashboard = pd.merge(dashboard, count_view.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
     dashboard = pd.merge(dashboard, count_comment.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
 
+    # 키워드 점수 계산 (단순 합산)
     dashboard['keyword_score'] = dashboard[['avg_count_like', 'avg_count_view', 'avg_count_comment']].sum(axis = 1)
 
     
 
+    # 5. 데이터 후처리
+    dashboard = dashboard.apply(lambda x : round(x, 4))
 
-    # 5. 데이터 업로드
+    # 6. 데이터 업로드
     engine = create_engine(f"postgresql+psycopg2://{DB_ID}:{DB_PW}@{DB_URL}:{DB_PORT}/{DB_NAME}")
 
     # 데이터 정렬 후 업데이트
@@ -115,6 +114,4 @@ if __name__ == '__main__' :
                       'count_view','avg_count_view', 
                       'count_comment','avg_count_comment']
     
-    pdb.set_trace()
-
     dashboard[dashboard_cols].to_sql('dashboard', con = engine, if_exists='replace') # DB에 데이터 업데이트
