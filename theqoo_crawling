@@ -1,0 +1,155 @@
+import time
+import random
+from datetime import datetime, timedelta
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
+import json
+import re
+import os
+
+# 댓글을 리스트로 저장하는 함수
+def get_comments_list(driver):
+    comments_list = []
+    actions = ActionChains(driver)
+
+    while True:
+        try:
+            show_more_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, 'div.show_more.comment_header'))
+            )
+            actions.move_to_element(show_more_button).click().perform()
+            time.sleep(random.uniform(0.5, 1.0))
+        except:
+            break
+
+    comment_items = driver.find_elements(By.CSS_SELECTOR, 'li.fdb_itm.clear')
+    for comment in comment_items:
+        try:
+            comment_text = comment.find_element(By.CSS_SELECTOR, 'div.xe_content').text
+            comments_list.append(comment_text)
+        except:
+            continue
+
+    return comments_list
+
+# 데이터 저장 함수
+def save_to_json(data, filename):
+    try:
+        if os.path.exists(filename):
+            with open(filename, "r", encoding="utf-8") as file:
+                existing_data = json.load(file)
+        else:
+            existing_data = []
+
+        existing_data.append(data)
+        with open(filename, "w", encoding="utf-8") as file:
+            json.dump(existing_data, file, ensure_ascii=False, indent=4)
+        print(f"데이터가 파일에 저장되었습니다: {data['ID']}")
+    except Exception as e:
+        print(f"파일 저장 중 오류 발생: {e}")
+
+# WebDriver 설정
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+filename = "real_time_data.json"
+
+today = datetime.now() - timedelta(days=2)
+end_date = today - timedelta(days=6)
+page = 8
+
+while True:
+    driver.get(f"https://theqoo.net/hot?page={page}")
+    print(f"페이지 {page} 크롤링 중...")
+
+    post_elements = WebDriverWait(driver, 5).until(
+        EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'table.bd_lst tbody.hide_notice tr'))
+    )
+
+    for post_element in post_elements:
+        try:
+            if 'notice' in post_element.get_attribute('class'):
+                continue
+
+            title_element = post_element.find_elements(By.CSS_SELECTOR, '.title a')
+            if not title_element:
+                continue
+
+            title = title_element[0].text
+            post_url = title_element[0].get_attribute("href")
+
+            # 게시물 목록에서 post_date 텍스트 가져오기
+            post_date_text = post_element.find_element(By.CSS_SELECTOR, '.time').text
+
+            # 목록에서 날짜 변환
+            if ":" in post_date_text:
+                post_date_list = today
+            elif len(post_date_text) == 8:
+                post_date_list = datetime.strptime(post_date_text, '%y.%m.%d')
+            else:
+                post_date_list = datetime.strptime(post_date_text, '%m.%d').replace(year=today.year)
+
+            # 날짜 범위 검사: 목록의 post_date가 end_date보다 과거면 크롤링 중단
+            if post_date_list < end_date:
+                print("크롤링 종료: 게시물이 end_date보다 과거입니다.")
+                driver.quit()
+                exit()
+
+            # 날짜 범위가 유효하지 않으면 다음 게시물로 이동
+            if not (end_date <= post_date_list <= today):
+                continue
+
+            category = post_element.find_element(By.CSS_SELECTOR, '.cate').text if post_element.find_elements(By.CSS_SELECTOR, '.cate') else "N/A"
+            views_text = post_element.find_element(By.CSS_SELECTOR, '.m_no').text.replace(",", "")
+            views = int(views_text) if views_text.isdigit() else 0
+            comment_count = post_element.find_elements(By.CSS_SELECTOR, '.far.fa-comment-dots')
+            comments_count = int(comment_count[0].text) if comment_count and comment_count[0].text.isdigit() else 0
+
+            # 개별 게시물로 이동하여 정확한 post_date 가져오기
+            driver.execute_script("window.open(arguments[0]);", post_url)
+            driver.switch_to.window(driver.window_handles[-1])
+
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.rhymix_content.xe_content')))
+            content = driver.find_element(By.CSS_SELECTOR, 'div.rhymix_content.xe_content').text
+
+            try:
+                # 개별 게시물에서 정확한 post_date 가져오기
+                post_date_text = driver.find_element(By.CSS_SELECTOR, 'div.side.fr span').text
+                post_date = datetime.strptime(post_date_text, '%Y.%m.%d %H:%M')
+            except Exception as e:
+                print(f"게시물 날짜 가져오기 오류: {e}")
+                post_date = post_date_list
+
+            comments = get_comments_list(driver)
+
+            post_data = {
+                "ID": "theqoo-" + re.search(r'(?<=hot/)\d+', post_url).group(),
+                "community": "theqoo",
+                "category": category,
+                "title": title,
+                "post_date": post_date.strftime('%Y-%m-%d %H:%M'),
+                "view": views,
+                "comments_count": len(comments),
+                "link": post_url,
+                "content": content,
+                "comments": comments
+            }
+
+            save_to_json(post_data, filename)
+
+            driver.close()
+            driver.switch_to.window(driver.window_handles[0])
+            time.sleep(random.uniform(0.8, 1.5))
+
+        except Exception as e:
+            print(f"오류 발생: {e}")
+            if "429" in str(e):
+                print("서버 요청 제한 발생(429), 10초 대기 중...")
+                time.sleep(10)
+
+    page += 1
+
+driver.quit()
