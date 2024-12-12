@@ -13,7 +13,7 @@ def fetch_source_data(keyword_list) :
     성능 향상 가능할 듯함
     """
     query = {
-        "size" : 10000, 
+        "size" : 500, 
         "query" : {
             "match_all" : {}
         }
@@ -56,12 +56,12 @@ def get_sentiment_result(keywords, text) :
     """
 
     prompt = """
-    You are a professional sentiment analyst.
-    Your task is to perform sentiment analysis for a keyword in a community post.
-    You will receive the keyword, title, content, and comments for the post.
-    If the given keyword is not valid within the context of the post, you must ignore to answer
-    If the keyword is valid, your answer must be in the form of 'keyword, label, score;', where the label is the most probable sentiment (positive, negative, or neutral) and the score represents its intensity.
-    Each keyword's score can differ from the overall sentiment of the post.
+    You are a sentiment analyst. Analyze the sentiment of a given keyword in a community post.  
+    - Labels: positive, negative, neutral, mixed, or anxious.  
+    - Score: intensity of the sentiment in a 1 to 10 scale.
+    Rules:  
+    1. Ignore invalid or irrelevant keywords.  
+    2. For valid keywords, respond in this format without punctuation or descriptions: keyword, label, score
     """
 
     msg = f"""
@@ -77,8 +77,6 @@ def get_sentiment_result(keywords, text) :
                     ])
 
     result = response.choices[0].message.content
-
-    pdb.set_trace()
 
     if result != 'not valid' :
         return result
@@ -150,23 +148,31 @@ if __name__ == '__main__' :
 
         if keywords :
 
-            # 5. 키워드별로 게시글애 대해 감성 분석(GPT 4o-mini)
+            # 5. 키워드별 게시글에 대한 감성 분석(GPT 4o-mini)
             sentiment = {}
             result = get_sentiment_result(keywords = keywords, text = text)
-            result = result.split(";")
+            result = result.replace(" ", "")
+            result = result.split("\n")
+            result = [v for v in result if len(v) > 0]
+            print(result, end = " ")
             for v in result :
                 k, l, s = v.split(",")
+                k = k.replace("keyword:", "")
+                l = l.replace("label:", "")
+                s = s.replace("score:", "")
                 sentiment[k.strip()] = [l.strip(), s.strip()]
+            print(sentiment)
+            pdb.set_trace()
 
 
+            # # +--------------------------------+
+            # # |         Dummy data             |
+            # # +--------------------------------+
             # for k in keywords :
-            #     # +--------------------------------+
-            #     # |         Dummy data             |
-            #     # +--------------------------------+
-            #     # label = random.choice(['positive', 'negative', 'neutral'])
-            #     # score = str(random.random())[:6]
-            #     # result = [label, score]
-            #     # sentiment[k] = result
+            #     label = random.choice(['positive', 'negative', 'neutral'])
+            #     score = str(random.random())[:6]
+            #     result = [label, score]
+            #     sentiment[k] = result
 
             if len(sentiment) > 0 :
                 item['sentiment'] = sentiment
