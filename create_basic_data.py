@@ -1,4 +1,4 @@
-from tqdm import tqdm
+import pdb
 import pandas as pd
 import requests 
 import json
@@ -50,22 +50,23 @@ def check_which_keyword(item, keyword_list) :
     else : 
         return keywords
 
-def get_sentiment_result(keyword, text) :
+def get_sentiment_result(keywords, text) :
     """
     GPT API를 사용하여 keyword에 대한 감성분석한 결과를 불러오는 함수
     """
+    pdb.set_trace()
 
     prompt = """
     You are a professional sentiment analyst.
     Your task is to perform sentiment analysis for a keyword in a community post.
     You will receive the keyword, title, content, and comments for the post.
-    If the given keyword is not valid within the context of the post, you should respond with 'not valid'.
-    If the keyword is valid, your answer must be in the form of 'label, score', where the label is the most probable sentiment (positive, negative, or neutral) and the score represents its intensity.
+    If the given keyword is not valid within the context of the post, you should not respond
+    If the keyword is valid, your answer must be in the form of 'keyword, label, score;', where the label is the most probable sentiment (positive, negative, or neutral) and the score represents its intensity.
     Each keyword's score can differ from the overall sentiment of the post.
     """
 
     msg = f"""
-    키워드 : {keyword}
+    키워드 : {keywords}
     게시글 : {text}
     """
 
@@ -77,8 +78,8 @@ def get_sentiment_result(keyword, text) :
                     ])
 
     result = response.choices[0].message.content
+
     if result != 'not valid' :
-        result = [s.strip() for s in result.split(",")]    
         return result
     else : 
         return None
@@ -123,7 +124,7 @@ if __name__ == '__main__' :
     # 2. 원천데이터 불러오기
     filtered_source_data = fetch_source_data(keyword_list)
 
-    for jsonData in tqdm(filtered_source_data) :
+    for jsonData in filtered_source_data :
 
         item = jsonData['_source']
 
@@ -148,24 +149,23 @@ if __name__ == '__main__' :
 
         if keywords :
 
-            # 5. 게시글이 포함하는 키워드별로 감성 분석
+            # 5. 키워드별로 게시글애 대해 감성 분석(GPT 4o-mini)
             sentiment = {}
-            for k in keywords :
-                # +-------------------------------+
-                # |        GPT 4o-mini            |
-                # +-------------------------------+
-                result = get_sentiment_result(keyword = k, text = text)
-                if result :
-                    sentiment[k] = result
-                
+            result = get_sentiment_result(keywords = keywords, text = text)
+            result = result.split(";")
+            for v in result :
+                k, l, s = v.split(",")
+                sentiment[k.strip()] = [l.strip(), s.strip()]
 
-                # +--------------------------------+
-                # |         Dummy data             |
-                # +--------------------------------+
-                # label = random.choice(['positive', 'negative', 'neutral'])
-                # score = str(random.random())[:6]
-                # result = [label, score]
-                # sentiment[k] = result
+
+            # for k in keywords :
+            #     # +--------------------------------+
+            #     # |         Dummy data             |
+            #     # +--------------------------------+
+            #     # label = random.choice(['positive', 'negative', 'neutral'])
+            #     # score = str(random.random())[:6]
+            #     # result = [label, score]
+            #     # sentiment[k] = result
 
             if len(sentiment) > 0 :
                 item['sentiment'] = sentiment
