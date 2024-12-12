@@ -54,13 +54,12 @@ def get_sentiment_result(keywords, text) :
     """
     GPT API를 사용하여 keyword에 대한 감성분석한 결과를 불러오는 함수
     """
-    pdb.set_trace()
 
     prompt = """
     You are a professional sentiment analyst.
     Your task is to perform sentiment analysis for a keyword in a community post.
     You will receive the keyword, title, content, and comments for the post.
-    If the given keyword is not valid within the context of the post, you should not respond
+    If the given keyword is not valid within the context of the post, you must ignore to answer
     If the keyword is valid, your answer must be in the form of 'keyword, label, score;', where the label is the most probable sentiment (positive, negative, or neutral) and the score represents its intensity.
     Each keyword's score can differ from the overall sentiment of the post.
     """
@@ -78,6 +77,8 @@ def get_sentiment_result(keywords, text) :
                     ])
 
     result = response.choices[0].message.content
+
+    pdb.set_trace()
 
     if result != 'not valid' :
         return result
