@@ -46,8 +46,8 @@ if __name__ == '__main__' :
 
     # 2. 데이터 전처리
     basic_data['keyword'] = basic_data.index # 키워드칼럼 생성
-    basic_data['label'] = basic_data['sentiment'].apply(lambda x : x[0]) # 감성 label 생성
-    basic_data['label_score'] = basic_data['sentiment'].apply(lambda x : float(x[1])) # 감성 score 생성
+    basic_data['label'] = basic_data['sentiment'].apply(lambda x : x[0].strip()) # 감성 label 생성
+    basic_data['label_score'] = basic_data['sentiment'].apply(lambda x : float(x[1].strip())) # 감성 score 생성
     basic_data['post_date'] = basic_data['post_date'].apply(lambda x : x[:10].strip()) # yyyy-mm-dd 데이터로 생성
     basic_data['count_post'] = 1
 

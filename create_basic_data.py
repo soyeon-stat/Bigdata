@@ -1,13 +1,9 @@
-import pdb
+from tqdm import tqdm
 import pandas as pd
 import requests 
 import json
 import openai
 from config.config import *
-import random       # 2024.11.27. 테스트용으로만 사용. 이후 삭제 예정
-
-
-openai.api_key = GPT_API_KEY
 
 def fetch_source_data(keyword_list) :
     """
@@ -17,9 +13,9 @@ def fetch_source_data(keyword_list) :
     성능 향상 가능할 듯함
     """
     query = {
-        "size" : 1000, # 불러올 데이터의 양. 디버그가 끝난 이후 늘릴 예정
+        "size" : 10000, 
         "query" : {
-            "match_all" : {} # 모든 데이터를 조회
+            "match_all" : {}
         }
     }
 
@@ -32,6 +28,14 @@ def fetch_source_data(keyword_list) :
 
     return response.json()['hits']['hits']
 
+def check_if_existing_basic(doc_id) :
+    url = f'{OPENSEARCH_URL}/basic/_docs/{doc_id}'
+    resp = requests.get(
+        url = url, 
+        auth = OPENSEARCH_AUTH,
+    )
+
+    return resp.status_code == 200
 
 def check_which_keyword(item, keyword_list) :
     """
@@ -51,21 +55,33 @@ def get_sentiment_result(keyword, text) :
     GPT API를 사용하여 keyword에 대한 감성분석한 결과를 불러오는 함수
     """
 
-    prompt = f"""
-    {keyword}에 대해선 "{text}"를 감성분석해줘.
-    분석한 결과는 [label, score]의 형태로만 반환해줘
+    prompt = """
+    You are a professional sentiment analyst.
+    Your task is to perform sentiment analysis for a keyword in a community post.
+    You will receive the keyword, title, content, and comments for the post.
+    If the given keyword is not valid within the context of the post, you should respond with 'not valid'.
+    If the keyword is valid, your answer must be in the form of 'label, score', where the label is the most probable sentiment (positive, negative, or neutral) and the score represents its intensity.
+    Each keyword's score can differ from the overall sentiment of the post.
     """
 
-    response = openai.Completion.create(
-            engine="gpt-4",  # 사용할 모델 (GPT-3.5 이상 사용 가능)
-            prompt=prompt,   # 모델에 전달할 텍스트 프롬프트
-            max_tokens=40,   # 최대 토큰 수 (응답의 길이)
-            temperature=0.3)
-        
-    # 응답에서 텍스트 추출
-    message = response.choices[0].text.strip()
+    msg = f"""
+    키워드 : {keyword}
+    게시글 : {text}
+    """
 
-    return message
+    response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                    {"role" : "system", "content" : prompt},
+                    {"role" : "user" , "content" : msg}
+                    ])
+
+    result = response.choices[0].message.content
+    if result != 'not valid' :
+        result = [s.strip() for s in result.split(",")]    
+        return result
+    else : 
+        return None
 
 def upload_to_basic_data(doc_id, data) :
     """
@@ -89,15 +105,31 @@ def calculate_popular(numerator, denomenator) :
 
 if __name__ == '__main__' :
 
+    openai.api_key = GPT_API_KEY
+
     # 1. 키워드 리스트 정의
-    keyword_list = ['화이팅', '취향']
+    keyword_list = ['계엄령'
+                , '대통령'
+                , '윤석열'
+                , '비트코인'
+                ,'업비트'
+                ,'흑백요리사'
+                ,'로제'
+                ,'이재명'
+                ,'한강'
+                ,'코스피'
+                ,'백종원']
 
     # 2. 원천데이터 불러오기
     filtered_source_data = fetch_source_data(keyword_list)
-    
-    for jsonData in filtered_source_data :
+
+    for jsonData in tqdm(filtered_source_data) :
 
         item = jsonData['_source']
+
+        # 중복 데이터 여부 체크
+        if check_if_existing_basic(item['ID']) :
+            continue
 
         # 3. 인기정도 구하기
         time_diff = pd.to_datetime(item['timestp']) - pd.to_datetime(item['post_date'])
@@ -120,20 +152,23 @@ if __name__ == '__main__' :
             sentiment = {}
             for k in keywords :
                 # +-------------------------------+
-                # | GPT API KEY 발급 받은 후 실행  |
+                # |        GPT 4o-mini            |
                 # +-------------------------------+
-                # result = get_sentiment_result(keyword = k, text = text)
+                result = get_sentiment_result(keyword = k, text = text)
+                if result :
+                    sentiment[k] = result
+                
+
+                # +--------------------------------+
+                # |         Dummy data             |
+                # +--------------------------------+
+                # label = random.choice(['positive', 'negative', 'neutral'])
+                # score = str(random.random())[:6]
+                # result = [label, score]
                 # sentiment[k] = result
 
-                # +--------------------------------+
-                # | API KEY 발급 전 사용할 대체 코드 |
-                # | (랜덤으로 label, score 부여)    |
-                # +--------------------------------+
-                label = random.choice(['긍정', '부정', '중립'])
-                score = str(random.random())[:6]
-                result = [label, score]
-                sentiment[k] = result
-            item['sentiment'] = sentiment
+            if len(sentiment) > 0 :
+                item['sentiment'] = sentiment
 
-            # 6. 기초데이터로 업로드 (키워드가 있는 경우만)
-            upload_to_basic_data(item['ID'], item)
+                # 6. 기초데이터로 업로드 (키워드가 있는 경우만)
+                upload_to_basic_data(item['ID'], item)
