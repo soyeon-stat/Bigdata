@@ -10,7 +10,7 @@ def fetch_basic_data() :
     query = {
         'size' : 1000,
         'query' : {
-            'match_all' : {},
+            'match_all' : {}, 
         }
     }
     response = requests.get(
