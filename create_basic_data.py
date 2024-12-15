@@ -3,20 +3,24 @@ import pandas as pd
 import requests 
 import json
 import openai
+import re
+from tqdm import tqdm
 from config.config import *
 
-def fetch_source_data(keyword_list) :
+
+
+def fetch_source_data(community) :
     """
-    원천데이터를 불러오는 함수
-    단, query부분은 성능 감안하여 개선여부 검토할 예정
-    사전에 정한 키워드 목록(keyword_list)을 포함하는 게시글만 불러오는 방향으로
-    성능 향상 가능할 듯함
+    원천데이터를 불러오는 함수. 커뮤니티별로 데이터를 불러옴.
     """
     query = {
-        "size" : 500, 
+        "sort": [{"_id": {"order": "asc"}}], 
+        "size": 1000, 
         "query" : {
-            "match_all" : {}
-        }
+            "term" : {
+                "community.keyword" : community
+            }
+        },
     }
 
     response = requests.get(
@@ -25,8 +29,29 @@ def fetch_source_data(keyword_list) :
         auth = OPENSEARCH_AUTH,
         data = json.dumps(query)
     )
+    data = response.json()
+    hits = data['hits']['hits']
 
-    return response.json()['hits']['hits']
+    while True :
+        if not hits :
+            break
+        last_sort_value = hits[-1]['sort']
+        query['search_after'] = last_sort_value
+        response = requests.get(
+            url = f"{OPENSEARCH_URL}/source/_search",
+            headers = OPENSEARCH_HEADERS,
+            auth = OPENSEARCH_AUTH,
+            data = json.dumps(query)
+        )
+
+        if response.status_code == 200 : 
+            new_data = response.json()
+            new_hits = new_data['hits']['hits']
+            if not new_hits :
+                break
+            hits.extend(new_hits)
+
+    return hits
 
 def check_if_existing_basic(doc_id) :
     url = f'{OPENSEARCH_URL}/basic/_docs/{doc_id}'
@@ -97,10 +122,30 @@ def upload_to_basic_data(doc_id, data) :
 
     assert response.status_code >= 200 and response.status_code < 300
 
+def covert_to_number(string_number) :
+
+    if type(string_number) == str : 
+        multiplyer = 0
+        if 'k' in string_number or 'K' in string_number :
+            multiplyer = 1000
+        elif 'm' in string_number or 'M' in string_number :
+            multiplyer = 1000000
+        num = re.sub(r"[^0-9]", "", string_number)
+
+        return float(num) * multiplyer
+
+    else :
+        return string_number
+
+
 def calculate_popular(numerator, denomenator) :
+    
     if numerator is None :
         return None
+    
     if denomenator != 0 :
+        numerator = covert_to_number(numerator)
+
         return float(numerator) / denomenator
 
 if __name__ == '__main__' :
@@ -121,61 +166,76 @@ if __name__ == '__main__' :
                 ,'백종원']
 
     # 2. 원천데이터 불러오기
-    filtered_source_data = fetch_source_data(keyword_list)
+    community_list = [
+        'clien',
+        'theqoo',
+        'INSTIZ',
+        '개드립넷',
+        'NATEPANN',
+        'HUMORUIV',
+        'mlbpark',
+    ]
+    
+    for community in community_list : 
 
-    for jsonData in filtered_source_data :
+        print(community)
+        filtered_source_data = fetch_source_data(community)
 
-        item = jsonData['_source']
+        for jsonData in tqdm(filtered_source_data) :
 
-        # 중복 데이터 여부 체크
-        if check_if_existing_basic(item['ID']) :
-            continue
+            item = jsonData['_source']
 
-        # 3. 인기정도 구하기
-        time_diff = pd.to_datetime(item['timestp']) - pd.to_datetime(item['post_date'])
-        unit_time = max(time_diff.total_seconds() / (3600 * 24), 0.5)   # 최소값 부여
-        item['vote_level'] = calculate_popular(item['vote_up'], unit_time)
-        item['view_level'] = calculate_popular(item['view'], unit_time)
-        item['comment_level'] = calculate_popular(item['n_comment'], unit_time)
+            # doc_id 구하기
+            doc_id = item.get('ID', "")
+            if not doc_id :
+                doc_it = item.get('id', "")
 
-        # 4. 게시글이 어떤 키워드를 포함하는지 확인
-        text = f"""
-            제목 : {item['title']}
-            본문 : {item['content']}
-            댓글들 : {','.join(item['comments'])}
-            """
-        keywords = check_which_keyword(item, keyword_list)
+            # 중복 데이터 여부 체크
+            if check_if_existing_basic(doc_id) :
+                continue
 
-        if keywords :
+            # 3. 인기정도 구하기
+            time_diff = pd.to_datetime(item['timestp']) - pd.to_datetime(item['post_date'])
+            unit_time = max(time_diff.total_seconds() / (3600 * 24), 0.5)   # 최소값 부여
+            item['vote_level'] = calculate_popular(item['vote_up'], unit_time)
+            item['view_level'] = calculate_popular(item['view'], unit_time)
+            item['comment_level'] = calculate_popular(item['n_comment'], unit_time)
 
-            # 5. 키워드별 게시글에 대한 감성 분석(GPT 4o-mini)
-            sentiment = {}
-            result = get_sentiment_result(keywords = keywords, text = text)
-            result = result.replace(" ", "")
-            result = result.split("\n")
-            result = [v for v in result if len(v) > 0]
-            print(result, end = " ")
-            for v in result :
-                k, l, s = v.split(",")
-                k = k.replace("keyword:", "")
-                l = l.replace("label:", "")
-                s = s.replace("score:", "")
-                sentiment[k.strip()] = [l.strip(), s.strip()]
-            print(sentiment)
-            pdb.set_trace()
+            # 4. 게시글이 어떤 키워드를 포함하는지 확인
+            text = f"""
+                제목 : {item['title']}
+                본문 : {item['content']}
+                댓글들 : {','.join(item['comments'])}
+                """
+            keywords = check_which_keyword(item, keyword_list)
+
+            if keywords :
+
+                # 5. 키워드별 게시글에 대한 감성 분석(GPT 4o-mini)
+                sentiment = {}
+                result = get_sentiment_result(keywords = keywords, text = text)
+                result = result.replace(" ", "")
+                result = result.split("\n")
+                result = [v for v in result if len(v) > 0]
+                for v in result :
+                    k, l, s = v.split(",")
+                    k = k.replace("keyword:", "")
+                    l = l.replace("label:", "")
+                    s = s.replace("score:", "")
+                    sentiment[k.strip()] = [l.strip(), s.strip()]
 
 
-            # # +--------------------------------+
-            # # |         Dummy data             |
-            # # +--------------------------------+
-            # for k in keywords :
-            #     label = random.choice(['positive', 'negative', 'neutral'])
-            #     score = str(random.random())[:6]
-            #     result = [label, score]
-            #     sentiment[k] = result
+                # # +--------------------------------+
+                # # |         Dummy data             |
+                # # +--------------------------------+
+                # for k in keywords :
+                #     label = random.choice(['positive', 'negative', 'neutral'])
+                #     score = str(random.random())[:6]
+                #     result = [label, score]
+                #     sentiment[k] = result
 
-            if len(sentiment) > 0 :
-                item['sentiment'] = sentiment
+                if len(sentiment) > 0 :
+                    item['sentiment'] = sentiment
 
-                # 6. 기초데이터로 업로드 (키워드가 있는 경우만)
-                upload_to_basic_data(item['ID'], item)
+                    # 6. 기초데이터로 업로드 (키워드가 있는 경우만)
+                    upload_to_basic_data(doc_id, item)
