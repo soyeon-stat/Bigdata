@@ -167,13 +167,13 @@ if __name__ == '__main__' :
 
     # 2. 원천데이터 불러오기
     community_list = [
-        'clien',
-        'theqoo',
-        'INSTIZ',
-        '개드립넷',
+        # 'clien',  # 완료
+        # 'theqoo', # 완료
+        # 'INSTIZ', # 2790개까지 완료
+        # '개드립넷',
         'NATEPANN',
         'HUMORUIV',
-        'mlbpark',
+        # 'mlbpark',
     ]
     
     for community in community_list : 
@@ -209,20 +209,23 @@ if __name__ == '__main__' :
                 """
             keywords = check_which_keyword(item, keyword_list)
 
-            if keywords :
 
-                # 5. 키워드별 게시글에 대한 감성 분석(GPT 4o-mini)
+            # 5. 키워드 게시글에 대한 감성 분석(GPT 4o-mini)
+            if keywords :
                 sentiment = {}
                 result = get_sentiment_result(keywords = keywords, text = text)
                 result = result.replace(" ", "")
                 result = result.split("\n")
                 result = [v for v in result if len(v) > 0]
                 for v in result :
-                    k, l, s = v.split(",")
-                    k = k.replace("keyword:", "")
-                    l = l.replace("label:", "")
-                    s = s.replace("score:", "")
-                    sentiment[k.strip()] = [l.strip(), s.strip()]
+                    try: 
+                        k, l, s = v.split(",")
+                        k = k.replace("keyword:", "")
+                        l = l.replace("label:", "")
+                        s = s.replace("score:", "")
+                        sentiment[k.strip()] = [l.strip(), s.strip()]
+                    except:
+                        continue
 
 
                 # # +--------------------------------+

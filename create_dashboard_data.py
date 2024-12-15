@@ -7,20 +7,54 @@ from config.config import *
 from sqlalchemy import create_engine
 
 def fetch_basic_data() :
+    """
+    원천데이터를 불러오는 함수. 커뮤니티별로 데이터를 불러옴.
+    """
     query = {
-        'size' : 1000,
-        'query' : {
-            'match_all' : {}, 
-        }
+        "sort": [{"_id": {"order": "asc"}}], 
+        "size": 1000, 
+        "query" : {
+            "match_all" : {},
+        },
     }
+
     response = requests.get(
-        url =  f"{OPENSEARCH_URL}/basic/_search",
+        url = f"{OPENSEARCH_URL}/basic/_search",
         headers = OPENSEARCH_HEADERS,
         auth = OPENSEARCH_AUTH,
         data = json.dumps(query)
     )
+    data = response.json()
+    hits = data['hits']['hits']
+    
+    i = 1
+    print(i)
 
-    return response.json()['hits']['hits']
+    while True :
+        if not hits :
+            break
+        last_sort_value = hits[-1]['sort']
+        query['search_after'] = last_sort_value
+        response = requests.get(
+            url = f"{OPENSEARCH_URL}/basic/_search",
+            headers = OPENSEARCH_HEADERS,
+            auth = OPENSEARCH_AUTH,
+            data = json.dumps(query)
+        )
+
+        if response.status_code == 200 : 
+            new_data = response.json()
+            new_hits = new_data['hits']['hits']
+            if not new_hits :
+                break
+            hits.extend(new_hits)
+            
+            i+=1
+            if i >= 16 :
+                break
+
+    return hits
+
 
 def calcurate_period_popular(group, col, agg, window_size) :
     group = group.reset_index()
@@ -37,12 +71,15 @@ if __name__ == '__main__' :
     basic_data = pd.DataFrame()
 
     response = fetch_basic_data()
-    basic_cols = ['post_date', 'community', 'vote_level', 'view_level', 'comment_level', 'sentiment']
+    basic_cols = ['post_date', 'community', 'vote_level', 'view_level', 'comment_level', 'sentiment', 'title','link']
 
     for item in response :
-        buffer = {c : item['_source'][c] for c in basic_cols}
-        buffer = pd.DataFrame(buffer)
-        basic_data = pd.concat([basic_data, buffer])
+        try : 
+            buffer = {c : item['_source'].get(c, None) for c in basic_cols}
+            buffer = pd.DataFrame(buffer)
+            basic_data = pd.concat([basic_data, buffer.dropna()])
+        except :
+            continue
 
     # 2. 데이터 전처리
     basic_data['keyword'] = basic_data.index # 키워드칼럼 생성
@@ -58,8 +95,13 @@ if __name__ == '__main__' :
     # 3. 주요 지표 계산
     pivoting = basic_data.groupby(['community', 'keyword', 'post_date'])
 
+    # 4. 조회수 높은 링크
+    link = basic_data.loc[pivoting['view_level'].idxmax().dropna(), ['community', 'keyword', 'post_date', 'link']]
+    title = basic_data.loc[pivoting['view_level'].idxmax().dropna(), ['community', 'keyword', 'post_date', 'title']]
+
+
     # 주요 지표를 계산할 기간. 최근 window_size일의 지표를 계산함. 본 데이터에서는 7일로 설정할 예정
-    window_size = 2
+    window_size = 5
 
     # 키워드의 감성 label
     # 감성이 여러개인 경우 중립을 선택. 시간 여유가 된다면 점수가 높은 경우를 택하는 로직으로 변경할 예정
@@ -94,11 +136,11 @@ if __name__ == '__main__' :
     dashboard = pd.merge(dashboard, count_like.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
     dashboard = pd.merge(dashboard, count_view.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
     dashboard = pd.merge(dashboard, count_comment.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
+    dashboard = pd.merge(dashboard, link.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
+    dashboard = pd.merge(dashboard, title.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
 
     # 키워드 점수 계산 (단순 합산)
     dashboard['keyword_score'] = dashboard[['avg_count_like', 'avg_count_view', 'avg_count_comment']].sum(axis = 1)
-
-    
 
     # 5. 데이터 후처리
     dashboard = dashboard.apply(lambda x : round(x, 4))
@@ -112,6 +154,12 @@ if __name__ == '__main__' :
                       'count_post', 'count_cum_post',
                       'count_like', 'avg_count_like', 
                       'count_view','avg_count_view', 
-                      'count_comment','avg_count_comment']
+                      'count_comment','avg_count_comment', 'link', 'title']
     
+    dashboard['label'] = dashboard['label'].str.replace("neutral", "중립")
+    dashboard['label'] = dashboard['label'].str.replace("negative", "부정")
+    dashboard['label'] = dashboard['label'].str.replace("positive", "긍정")
+    dashboard['label'] = dashboard['label'].str.replace("mixed", "혼합")
+    dashboard['label'] = dashboard['label'].str.replace("anxious", "불안")
+
     dashboard[dashboard_cols].to_sql('dashboard', con = engine, if_exists='replace') # DB에 데이터 업데이트
