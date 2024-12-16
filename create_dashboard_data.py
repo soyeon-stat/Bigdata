@@ -19,7 +19,7 @@ def fetch_basic_data() :
     }
 
     response = requests.get(
-        url = f"{OPENSEARCH_URL}/basic/_search",
+        url = f"{OPENSEARCH_URL}/modified_basic/_search",
         headers = OPENSEARCH_HEADERS,
         auth = OPENSEARCH_AUTH,
         data = json.dumps(query)
@@ -27,16 +27,13 @@ def fetch_basic_data() :
     data = response.json()
     hits = data['hits']['hits']
     
-    i = 1
-    print(i)
-
     while True :
         if not hits :
             break
         last_sort_value = hits[-1]['sort']
         query['search_after'] = last_sort_value
         response = requests.get(
-            url = f"{OPENSEARCH_URL}/basic/_search",
+            url = f"{OPENSEARCH_URL}/modified_basic/_search",
             headers = OPENSEARCH_HEADERS,
             auth = OPENSEARCH_AUTH,
             data = json.dumps(query)
@@ -48,10 +45,6 @@ def fetch_basic_data() :
             if not new_hits :
                 break
             hits.extend(new_hits)
-            
-            i+=1
-            if i >= 16 :
-                break
 
     return hits
 
@@ -64,6 +57,22 @@ def calcurate_period_popular(group, col, agg, window_size) :
         return group[col].rolling(window = window_size, min_periods=1).mean()
     elif agg == 'sum' : 
         return group[col].rolling(window = window_size, min_periods=1).sum()
+
+def aggregate_basic_data(data, col_nm, idx_col, result_col) :
+    l = data[col_nm].quantile(0.05)
+    u = data[col_nm].quantile(0.95)
+    data = data.loc[(l <= data[col_nm]) & (data[col_nm] <= u), [col_nm] + idx_col]
+
+    pivoting = data.groupby(idx_col)
+    
+    cnt = pivoting.median()
+    cnt.columns = [result_col]
+    cnt[f'avg_{result_col}'] = calcurate_period_popular(cnt, result_col, 'mean', window_size).tolist()
+
+    return cnt
+
+
+
 
 if __name__ == '__main__' :
 
@@ -82,6 +91,7 @@ if __name__ == '__main__' :
             continue
 
     # 2. 데이터 전처리
+    basic_data = basic_data.drop_duplicates()
     basic_data['keyword'] = basic_data.index # 키워드칼럼 생성
     basic_data['label'] = basic_data['sentiment'].apply(lambda x : x[0].strip()) # 감성 label 생성
     basic_data['label_score'] = basic_data['sentiment'].apply(lambda x : float(x[1].strip())) # 감성 score 생성
@@ -93,7 +103,8 @@ if __name__ == '__main__' :
 
 
     # 3. 주요 지표 계산
-    pivoting = basic_data.groupby(['community', 'keyword', 'post_date'])
+    idx_col = ['community', 'keyword', 'post_date']
+    pivoting = basic_data.groupby(idx_col)
 
     # 4. 조회수 높은 링크
     link = basic_data.loc[pivoting['view_level'].idxmax().dropna(), ['community', 'keyword', 'post_date', 'link']]
@@ -115,20 +126,24 @@ if __name__ == '__main__' :
     count_post = pivoting[['count_post']].sum()
     count_post['count_cum_post'] = calcurate_period_popular(count_post, 'count_post', 'sum', window_size).tolist()
 
-    # 추천수준/평균추천수준
-    count_like = pivoting[['vote_level']].mean()
-    count_like.columns = ['count_like']
-    count_like['avg_count_like'] = calcurate_period_popular(count_like, 'count_like', 'mean', window_size).tolist()
+    # (평균)추천/ (평균)조회/ (평균)댓글 수준
+    count_like = aggregate_basic_data(basic_data, 'vote_level', idx_col, 'count_like')
+    count_view = aggregate_basic_data(basic_data, 'view_level', idx_col, 'count_view')
+    count_comment = aggregate_basic_data(basic_data, 'comment_level', idx_col, 'count_comment')
 
-    # 조회수준/평균조회수준
-    count_view = pivoting[['view_level']].mean()
-    count_view.columns = ['count_view']
-    count_view['avg_count_view'] = calcurate_period_popular(count_view, 'count_view', 'mean', window_size).tolist()
+    # count_like = pivoting[['vote_level']].agg(pd.Series.mode)
+    # count_like.columns = ['count_like']
+    # count_like['avg_count_like'] = calcurate_period_popular(count_like, 'count_like', 'mean', window_size).tolist()
 
-    # 댓글수준/평균댓글수준
-    count_comment = pivoting[['comment_level']].mean()
-    count_comment.columns = ['count_comment']
-    count_comment['avg_count_comment'] = calcurate_period_popular(count_comment, 'count_comment', 'mean', window_size).tolist()
+    # # 조회수준/평균조회수준
+    # count_view = pivoting[['view_level']].agg(pd.Series.mode)
+    # count_view.columns = ['count_view']
+    # count_view['avg_count_view'] = calcurate_period_popular(count_view, 'count_view', 'mean', window_size).tolist()
+
+    # # 댓글수준/평균댓글수준
+    # count_comment = pivoting[['comment_level']].agg(pd.Series.mode)
+    # count_comment.columns = ['count_comment']
+    # count_comment['avg_count_comment'] = calcurate_period_popular(count_comment, 'count_comment', 'mean', window_size).tolist()
 
     # 4. 데이터 병합    
     dashboard = pd.merge(label.reset_index(), label_score.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')

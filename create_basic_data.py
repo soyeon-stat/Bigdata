@@ -8,7 +8,6 @@ from tqdm import tqdm
 from config.config import *
 
 
-
 def fetch_source_data(community) :
     """
     원천데이터를 불러오는 함수. 커뮤니티별로 데이터를 불러옴.
@@ -112,7 +111,7 @@ def upload_to_basic_data(doc_id, data) :
     """
     기본 데이터로 가공한 결과를 업로드하는 함수
     """
-    url = f"{OPENSEARCH_URL}/basic/_doc/{doc_id}"
+    url = f"{OPENSEARCH_URL}/modified_basic/_doc/{doc_id}"
     response = requests.post(
         url = url,
         headers = OPENSEARCH_HEADERS,
@@ -125,7 +124,7 @@ def upload_to_basic_data(doc_id, data) :
 def covert_to_number(string_number) :
 
     if type(string_number) == str : 
-        multiplyer = 0
+        multiplyer = 1
         if 'k' in string_number or 'K' in string_number :
             multiplyer = 1000
         elif 'm' in string_number or 'M' in string_number :
@@ -167,13 +166,15 @@ if __name__ == '__main__' :
 
     # 2. 원천데이터 불러오기
     community_list = [
+        'gasengi',
+        'dcinside',
         # 'clien',  # 완료
         # 'theqoo', # 완료
-        # 'INSTIZ', # 2790개까지 완료
-        # '개드립넷',
-        'NATEPANN',
-        'HUMORUIV',
-        # 'mlbpark',
+        # 'INSTIZ', # 완료
+        # '개드립넷',# 완료
+        # 'NATEPANN',  # 완료
+        # 'HUMORUIV', # 완료
+        # 'mlbpark', # 완료
     ]
     
     for community in community_list : 
@@ -188,7 +189,7 @@ if __name__ == '__main__' :
             # doc_id 구하기
             doc_id = item.get('ID', "")
             if not doc_id :
-                doc_it = item.get('id', "")
+                doc_id = item.get('id', "")
 
             # 중복 데이터 여부 체크
             if check_if_existing_basic(doc_id) :
