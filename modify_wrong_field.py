@@ -68,7 +68,7 @@ def get_source_doc(doc_id) :
     )
     hits = resp.json()['hits']['hits']
     if len(hits) > 0 :
-        return resp
+        return hits
 
     else :
         query = {
@@ -129,12 +129,12 @@ def upload_to_basic_data(doc_id, data) :
 if __name__ == '__main__' : 
 
     community_list = [
-        'clien',  # 완료
-        'theqoo', # 완료
-        'INSTIZ', # 완료
-        '개드립넷', # 완료
-        'NATEPANN', # 완료
-        'HUMORUIV', # 완료
+        # 'clien',  # 완료
+        # 'theqoo', # 완료
+        # 'INSTIZ', # 완료
+        # '개드립넷', # 완료
+        # 'NATEPANN', # 완료
+        # 'HUMORUIV', # 완료
     ]
     for community in community_list : 
         print(community)
