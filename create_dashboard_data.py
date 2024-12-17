@@ -7,9 +7,7 @@ from config.config import *
 from sqlalchemy import create_engine
 
 def fetch_basic_data() :
-    """
-    원천데이터를 불러오는 함수. 커뮤니티별로 데이터를 불러옴.
-    """
+
     query = {
         "sort": [{"_id": {"order": "asc"}}], 
         "size": 1000, 
@@ -86,12 +84,13 @@ if __name__ == '__main__' :
         try : 
             buffer = {c : item['_source'].get(c, None) for c in basic_cols}
             buffer = pd.DataFrame(buffer)
-            basic_data = pd.concat([basic_data, buffer.dropna()])
+            basic_data = pd.concat([basic_data, buffer])
         except :
             continue
 
+    pdb.set_trace()
+
     # 2. 데이터 전처리
-    basic_data = basic_data.drop_duplicates()
     basic_data['keyword'] = basic_data.index # 키워드칼럼 생성
     basic_data['label'] = basic_data['sentiment'].apply(lambda x : x[0].strip()) # 감성 label 생성
     basic_data['label_score'] = basic_data['sentiment'].apply(lambda x : float(x[1].strip())) # 감성 score 생성
@@ -101,6 +100,7 @@ if __name__ == '__main__' :
     basic_data.reset_index(drop = True, inplace = True) # 인덱스 초기화
     basic_data.drop(['sentiment'], axis = 1, inplace = True) # 감성 칼럼 삭제
 
+    basic_data = basic_data.drop_duplicates()
 
     # 3. 주요 지표 계산
     idx_col = ['community', 'keyword', 'post_date']
@@ -178,3 +178,4 @@ if __name__ == '__main__' :
     dashboard['label'] = dashboard['label'].str.replace("anxious", "불안")
 
     dashboard[dashboard_cols].to_sql('dashboard', con = engine, if_exists='replace') # DB에 데이터 업데이트
+    print('done')
