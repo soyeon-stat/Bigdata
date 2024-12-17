@@ -84,17 +84,17 @@ if __name__ == '__main__' :
         try : 
             buffer = {c : item['_source'].get(c, None) for c in basic_cols}
             buffer = pd.DataFrame(buffer)
-            basic_data = pd.concat([basic_data, buffer])
+            if not buffer.empty : 
+                basic_data = pd.concat([basic_data, buffer])
         except :
             continue
-
-    pdb.set_trace()
-
+ 
     # 2. 데이터 전처리
     basic_data['keyword'] = basic_data.index # 키워드칼럼 생성
     basic_data['label'] = basic_data['sentiment'].apply(lambda x : x[0].strip()) # 감성 label 생성
     basic_data['label_score'] = basic_data['sentiment'].apply(lambda x : float(x[1].strip())) # 감성 score 생성
     basic_data['post_date'] = basic_data['post_date'].apply(lambda x : x[:10].strip()) # yyyy-mm-dd 데이터로 생성
+    basic_data['link_criterita'] = basic_data['view_level'].fillna(0) + basic_data['vote_level'].fillna(0) + basic_data['comment_level'].fillna(0)
     basic_data['count_post'] = 1
 
     basic_data.reset_index(drop = True, inplace = True) # 인덱스 초기화
@@ -106,9 +106,9 @@ if __name__ == '__main__' :
     idx_col = ['community', 'keyword', 'post_date']
     pivoting = basic_data.groupby(idx_col)
 
-    # 4. 조회수 높은 링크
-    link = basic_data.loc[pivoting['view_level'].idxmax().dropna(), ['community', 'keyword', 'post_date', 'link']]
-    title = basic_data.loc[pivoting['view_level'].idxmax().dropna(), ['community', 'keyword', 'post_date', 'title']]
+    # 4. 링크, 제목 추출 (조회/추천/댓글 수준이 높은 링크)
+    link = basic_data.loc[pivoting['link_criterita'].idxmax().dropna(), ['community', 'keyword', 'post_date', 'link']]
+    title = basic_data.loc[pivoting['link_criterita'].idxmax().dropna(), ['community', 'keyword', 'post_date', 'title']]
 
 
     # 주요 지표를 계산할 기간. 최근 window_size일의 지표를 계산함. 본 데이터에서는 7일로 설정할 예정
@@ -130,6 +130,11 @@ if __name__ == '__main__' :
     count_like = aggregate_basic_data(basic_data, 'vote_level', idx_col, 'count_like')
     count_view = aggregate_basic_data(basic_data, 'view_level', idx_col, 'count_view')
     count_comment = aggregate_basic_data(basic_data, 'comment_level', idx_col, 'count_comment')
+
+
+    # 대표 게시글 추출
+    link_criterita = pivoting[['link_criterita']].median()
+
 
     # count_like = pivoting[['vote_level']].agg(pd.Series.mode)
     # count_like.columns = ['count_like']
@@ -153,6 +158,7 @@ if __name__ == '__main__' :
     dashboard = pd.merge(dashboard, count_comment.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
     dashboard = pd.merge(dashboard, link.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
     dashboard = pd.merge(dashboard, title.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
+    dashboard = pd.merge(dashboard, link_criterita.reset_index(), on = ['post_date', 'community', 'keyword'], how = 'left')
 
     # 키워드 점수 계산 (단순 합산)
     dashboard['keyword_score'] = dashboard[['avg_count_like', 'avg_count_view', 'avg_count_comment']].sum(axis = 1)
@@ -169,7 +175,7 @@ if __name__ == '__main__' :
                       'count_post', 'count_cum_post',
                       'count_like', 'avg_count_like', 
                       'count_view','avg_count_view', 
-                      'count_comment','avg_count_comment', 'link', 'title']
+                      'count_comment','avg_count_comment', 'link', 'title', 'link_criterita']
     
     dashboard['label'] = dashboard['label'].str.replace("neutral", "중립")
     dashboard['label'] = dashboard['label'].str.replace("negative", "부정")
