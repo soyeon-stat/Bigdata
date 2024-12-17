@@ -72,7 +72,7 @@ if __name__ == '__main__' :
 
     basic_data.reset_index(drop = True, inplace = True) # 인덱스 초기화
     basic_data.drop(['sentiment'], axis = 1, inplace = True) # 감성 칼럼 삭제
-    basic_data = basic_data.drop_duplicates()
+    pdb.set_trace()
 
     basic_data['label'] = basic_data['label'].str.replace("neutral", "중립")
     basic_data['label'] = basic_data['label'].str.replace("negatively", "부정")

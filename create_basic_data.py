@@ -174,7 +174,7 @@ if __name__ == '__main__' :
         # '개드립넷',# 완료
         # 'NATEPANN',  # 완료
         # 'HUMORUIV', # 완료
-        # 'mlbpark', # 완료
+        # 'mlbpark', 
     ]
     
     for community in community_list : 
